@@ -5,17 +5,6 @@ from math import sin, pi, pow, exp, sqrt
 
 #need a function that slices including the PML margin
 
-def gaussian_derivative_pulse(pcb, dt, beta):
-
-    #fixme: normalize
-    t = pcb.time
-    s = 4.0/(beta*dt)
-    b = (t - beta*dt)
-    exponent_1 = -1.0*((s)**2.0)*((b)**2.0)
-    part_one = exp(exponent_1)
-    part_two = -2.0*(s**2.0)*b
-    return part_one * part_two
-
 
 class Port:
     def __init__(self, pcb, SPICE_net, F_x, F_y):
@@ -82,6 +71,8 @@ class Port:
         return (pcb.grid.E[self.N_x,self.N_y,z_slice,Z]/sqrt(epsilon_0))*(pcb.cell_size)
 
 
+# Gaussian pulses determined via mathematica; see normalizedgaussian.nb
+# and normalized gaussian.nb.pdf
 # see http://www.cse.yorku.ca/~kosta/CompVis_Notes/fourier_transform_Gaussian.pdf
 # http://www.sci.utah.edu/~gerig/CS7960-S2010/handouts/04%20Gaussian%20derivatives.pdf
 
@@ -97,17 +88,26 @@ def normalized_gaussian_derivative_pulse(pcb,fwhm):
 
 ###############################################################################
 
-def gaussian_derivative_pulse(pcb, dt, beta):
-    #have to normalize
-    t = pcb.time
-    s = 4.0/(beta*dt)
-    b = (t - beta*dt)
-    exponent_1 = -1.0*((s)**2.0)*((b)**2.0)
-    part_one = exp(exponent_1)
-    part_two = -2.0*(s**2.0)*b
-    return part_one * part_two
+# def gaussian_derivative_pulse(pcb, dt, beta):
+#     #have to normalize
+#     t = pcb.time
+#     s = 4.0/(beta*dt)
+#     b = (t - beta*dt)
+#     exponent_1 = -1.0*((s)**2.0)*((b)**2.0)
+#     part_one = exp(exponent_1)
+#     part_two = -2.0*(s**2.0)*b
+#     return part_one * part_two
 
-#scipy.stats.norm.pdf(x, mu, sigma)*(mu - x)/sigma**2
+
+# def normalized_gaussian_pulse(t,fwhm):
+#     sigma = fwhm/2.355
+#     return exp(-((t**2.0)/(2.0*(sigma**2.0))))
+#
+# def normalized_gaussian_derivative_pulse(t,fwhm):
+#     sigma = fwhm/2.355
+#     return (exp((1.0/2.0) - (t**2.0)/(2.0*sigma**2.0))*t)/sigma
+#
+
 
 def compute_all_voltages(pcb):
     for port in pcb.component_ports:
