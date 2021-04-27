@@ -7,9 +7,16 @@ link-citations: true
 
 <!---
 
-pandoc --filter pandoc-citeproc --bibliography=references.bib -s furnace_quick.md -o paper.html -H style.css
+pandoc --filter pandoc-citeproc --bibliography=references.bib --standalone furnace_quick.md -o paper.html -H style.css
 
+--mathjax?
 -->
+
+
+* A wrapper around flaport/fdtd's awesome electromagnetics library:
+   - tissue.py: supports import of IT.IS Foundation computational phantom voxel files, with their supplied Cole-Cole dielectric model, for tissue simulations. Pretty rough, not formally validated.
+   - PCB.py: A test of coupled NGSPICE - adaptive timestep and direct KiCAD netlist import and probe/source creation. Currently totally broken.
+
 
 
 

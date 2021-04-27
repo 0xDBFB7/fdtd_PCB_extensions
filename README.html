@@ -1,0 +1,50 @@
+<!---# Musings on an inexpensive 1500 C furnace-->
+<!---
+
+pandoc --filter pandoc-citeproc --bibliography=references.bib --standalone furnace_quick.md -o paper.html -H style.css
+
+--mathjax?
+-->
+<ul>
+<li>A wrapper around flaport/fdtd’s awesome electromagnetics library:
+<ul>
+<li>tissue.py: supports import of IT.IS Foundation computational phantom voxel files, with their supplied Cole-Cole dielectric model, for tissue simulations. Pretty rough, not formally validated.</li>
+<li>PCB.py: A test of coupled NGSPICE - adaptive timestep and direct KiCAD netlist import and probe/source creation. Currently totally broken.</li>
+</ul></li>
+</ul>
+<p>NGSPICE’s KSPICE coupled transmission lines require the capacitance and inductance per unit length in Maxwell matrix form, rather than the physical <span class="math inline"><em>C</em><sub><em>e</em><em>v</em><em>e</em><em>n</em></sub></span>/<span class="math inline"><em>L</em><sub><em>e</em><em>v</em><em>e</em><em>n</em></sub></span> (each line’s capacitance and inductance to ground) and <span class="math inline"><em></em><sub><em>o</em><em>d</em><em>d</em></sub></span> (between elements) form provided by tools like wcalc. “matrix not positive definite”. [Schutt-Aine] discusses this; we reproduce here for convienience.</p>
+<p>[ L_{11} = L_{22} = L_{even} ] [ L_{12} = L_{21} = L_{odd} ] [ C_{11} = C_{22} = C_{even}+C_{odd} ] [ C_{12} = C_{21} {} = -C_{odd} ]</p>
+<p>In practice, the timestep required to obtain convergence in particularly tight corners of the SPICE simulation can drop to 1e-20, which is far below the Courant limit of the FDTD simulation. To eek out a bit more performance, a simple adaptive-timestep technique from [ a ] is used; we simply set the timestep so that the maximum change in voltage per timestep from the SPICE portion is less than some threshold.</p>
+<p>Conductors are represented by zeroing all components of the electric field in those regions.</p>
+<p>There are many different possible source geometries, each introducing their own distortions.</p>
+<p>There are many ways of linking SPICE and FDTD.</p>
+<p>Method-of-moments solvers like NEC-2 are the standard for simulating these sorts of antennas. However, most commonly-available packages don’t seem to handle multiple dielectric constants, such as the air and substrate of a patch antenna.</p>
+<p>The impedance of a structure over frequency can be determined in FDTD by:</p>
+<p>This is the computational equivalent of dropping a piano off a balcony to see which key is stuck.</p>
+<p>See [Penney 1994], [Luebbers 1992], [Luebbers 1991], [Luk 1997].</p>
+<p>Our implementation is in .</p>
+<p>A similar mismatch to the SPICE exists for fourier methods - but in the other direction. The courant limit often demands fine timesteps, but since each FFT bin is $ f_{bin} = n_{bin} / (N_{simulation}  dt) $ , the majority of the FFT bins exist into the hundreds or thousands of GHz, leaving no resolution in the low-frequency domain of interest unless <span class="math inline"><em>N</em><sub><em>s</em><em>i</em><em>m</em><em>u</em><em>l</em><em>a</em><em>t</em><em>i</em><em>o</em><em>n</em></sub></span> is extremely large - even if all the transients in the simulation have died down, you still have to keep the sim running to make the FFT happy!</p>
+<p>There’s more than enough ‘information entropy’ in 4000 FDTD points for most antennas. But you need some 30,000 points to get 10 bins below 20 GHz!</p>
+<p>There are a few methods of changing the FFT bin size artificially, which [Bi 1992] reviews. You can “use a manual fourier integration over the frequency region of interest”.</p>
+<p>But, in a staggering turn of events which will presumably be familiar to statisticans and preposterous to everyone else, a far simpler method is to {} 95% of the data, by down-sampling to 1/10th or so.</p>
+<p>An equally simple method that seemed to produce better results in our case is to pad the voltage and current samples to the correct length. The jump discontinuity introduced by padding with zeros has a negligible effect.</p>
+<p>It’s so thumpingly unintuitive to me that adding 50,000 zeros to a 5000 value dataset can improve the resolution of a measurement by 300-fold.</p>
+<p>It is important to remember to normalize the gaussian pulse, or else numerical noise will be introduced. The magnitude is not important - [Luebbers 1992] use 100v, others use 1v, etc.</p>
+<p><span class="citation" data-cites="FDTD1992">Luebbers and Beggs (<a href="#ref-FDTD1992" role="doc-biblioref">1992</a>)</span></p>
+<p>Though uneven dt FFTs exist, the time step can be constant at the courant limit for this simulation.</p>
+<p>A step impulse (1 first timestep, 0 otherwise) has been used in some works, though in our case performance was quite horrid.</p>
+<p>A correction factor due to the staggered magnetic field of the Yee lattice must be introduced; [Fang 1994]. Their <span class="math inline"><em>Z</em><sub>2</sub></span> equation (correcting for spatial inaccuracies, but not temporal) was sufficient.</p>
+<p>This technique is equivalent to that used in electrochemistry, known as fourier impedance spectroscopy - except they seem to usually use a known impedance source rather than a hard source, presumably because ideal hard sources don’t exist in reality.</p>
+<p>Allowing the simulation to run for long enough that all transients dissipate is important for accuracy - deceptive dips in the current can cause early termination. A surprising amount of detail is contributed by even the smallest current levels. Our threshold is 1e-7 amps for 700 iterations.</p>
+<p>[Samaras 2004] has a very useful set of experimental and FDTD data for calibration and comparison. Comparing a probe via source in the different positions, we obtained agreement of <span class="math inline"> ∼ 7%</span> in impedance and <span class="math inline"> ∼ 5%</span> in frequency.</p>
+<p>The use of a hard source feed-port affects the number of timesteps required by introducing unphysical transients. Using a port with a virtual 50-ohm resistance reduces the computational requirements by a large factor; see [Luebbers 1996].</p>
+<p>Simply monitoring the source current during the simulation is somewhat deceptive. Periodically monitoring the change in the fourier transform seems to be a better convergence metric.</p>
+<p>The units of the FFT (unlike those of the continuous FT) remain in volts.</p>
+<p>Most equations in papers on the FDTD method are supplied without making the scaling factors explicit; some need multiplying by the Courant number, For use with flaport/fdtd the H-field to current line integral in [] requires scaling by <span class="math inline"><em>μ</em><sub>0</sub> * (<em>d</em><em>x</em>/<em>d</em><em>t</em>)</span>, where <span class="math inline"><em>μ</em><sub>0</sub></span> is the vacuum magnetic permittivity, dx the cell size, and dt the timestep - despite the equation already possessing a deceptive set of <span class="math inline"><em>d</em><em>x</em></span>-es.</p>
+<p>FIX THIS IT’S WRONG</p>
+<p>Naturally, if one is competent, this discrepancy will be immediately obvious. Those not dimensionally-intuitive, such as myself, find it useful to run dimensional analysis using a unit-aware calculator such as {}.</p>
+<div id="refs" class="references hanging-indent" role="doc-bibliography">
+<div id="ref-FDTD1992">
+<p>Luebbers, R. J., and J. Beggs. 1992. “FDTD Calculation of Wide-Band Antenna Gain and Efficiency.” <em>IEEE Transactions on Antennas and Propagation</em> 40 (11): 1403–7. <a href="https://doi.org/10.1109/8.202717">https://doi.org/10.1109/8.202717</a>.</p>
+</div>
+</div>

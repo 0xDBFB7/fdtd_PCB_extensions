@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <title>Musings on an inexpensive 1500 C silicon carbide furnace</title>
+  <style>
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    span.underline{text-decoration: underline;}
+    div.column{display: inline-block; vertical-align: top; width: 50%;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    ul.task-list{list-style: none;}
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" type="text/javascript"></script>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">Musings on an inexpensive 1500 C silicon carbide furnace</h1>
+</header>
+<!---# Musings on an inexpensive 1500 C furnace-->
+<!---
+
+pandoc --filter pandoc-citeproc --bibliography=/home/arthurdent/Projects/covidinator/documents/references.bib --standalone --highlight-style pygments Z_params.md --mathjax -o Z_params.html
+
+?
+-->
+<h1 id="some-notes-on-z-and-fdtd">Some notes on Z and FDTD</h1>
+<p>Note: I’m way overcomplicating this: it’s an extremely basic 20-line procedure; these are also my notes from using this.</p>
+<p>I was using this to measure the impedance of some antenna and microstrip designs; so I’ve only tried getting the Z11 / Z22 so far. I believe it is easy to compute S11 and S22 directly from that.</p>
+<p>I believe computing S12 and S21 should be essentially identical; apply a pulse to each source in turn, and just divide the complex voltages accordingly; in that case, the output will be relative to the source impedance.</p>
+<p>In addition, this was all formulated for electrical signals on planar with ground plane, where the kinds of sources make sense. I have no idea how to modify this for the optical domain - if modifications are indeed required.</p>
+<p>The <em>impedance</em> of a structure over frequency can be determined easily by:</p>
+<p>See (<span class="citation" data-cites="Input1994">Penney and Luebbers (<a href="#ref-Input1994" role="doc-biblioref">1994</a>)</span>), (<span class="citation" data-cites="FDTD1992">Luebbers and Beggs (<a href="#ref-FDTD1992" role="doc-biblioref">1992</a>)</span>), (<span class="citation" data-cites="Finite1991">Luebbers and Kunz (<a href="#ref-Finite1991" role="doc-biblioref">1991</a>)</span>), (<span class="citation" data-cites="FDTD1997">Luk et al. (<a href="#ref-FDTD1997" role="doc-biblioref">1997</a>)</span>).</p>
+<h3 id="terminate-all-ports-with-a-soft-source-with-the-right-impedance.">Terminate all ports with a soft source with the right impedance.</h3>
+<h3 id="apply-a-broadband-pulse.">Apply a broadband pulse.</h3>
+<p>This is the computational equivalent of dropping a piano off a balcony to see which key is stuck.</p>
+<p>Our implementation is in .</p>
+<p>A similar mismatch to the SPICE exists for fourier methods - but in the other direction. The courant limit often demands fine timesteps, but since each FFT bin is $ f_{bin} = n_{bin} / (N_{simulation}  dt) $ , the majority of the FFT bins exist into the hundreds or thousands of GHz, leaving no resolution in the low-frequency domain of interest unless <span class="math inline">\(N_{simulation}\)</span> is extremely large - even if all the transients in the simulation have died down, you still have to keep the sim running to make the FFT happy!</p>
+<p>There’s more than enough ‘information entropy’ in 4000 FDTD points for most antennas. But you need some 30,000 points to get 10 bins below 20 GHz!</p>
+<p>There are a few methods of changing the FFT bin size artificially, which [Bi 1992] reviews. You can “use a manual fourier integration over the frequency region of interest”.</p>
+<p>But, in a staggering turn of events which will presumably be familiar to statisticans and preposterous to everyone else, a far simpler method is to {} 95% of the data, by down-sampling to 1/10th or so.</p>
+<p>An equally simple method that seemed to produce better results in our case is to pad the voltage and current samples to the correct length. The jump discontinuity introduced by padding with zeros has a negligible effect.</p>
+<p>It’s so thumpingly unintuitive to me that adding 50,000 zeros to a 5000 value dataset can improve the resolution of a measurement by 300-fold.</p>
+<p>It is important to remember to normalize the gaussian pulse, or else numerical noise will be introduced. The magnitude is not important - [Luebbers 1992] use 100v, others use 1v, etc.</p>
+<p><span class="citation" data-cites="FDTD1992">Luebbers and Beggs (<a href="#ref-FDTD1992" role="doc-biblioref">1992</a>)</span></p>
+<p>Though uneven dt FFTs exist, the time step can be constant at the courant limit for this simulation.</p>
+<p>A step impulse (1 first timestep, 0 otherwise) has been used in some works, though in our case performance was quite horrid.</p>
+<p>A correction factor due to the staggered magnetic field of the Yee lattice must be introduced; [Fang 1994]. Their <span class="math inline">\(Z_2\)</span> equation (correcting for spatial inaccuracies, but not temporal) was sufficient.</p>
+<p>This technique is equivalent to that used in electrochemistry, known as fourier impedance spectroscopy - except they seem to usually use a known impedance source rather than a hard source, presumably because ideal hard sources don’t exist in reality.</p>
+<p>Allowing the simulation to run for long enough that all transients dissipate is important for accuracy - deceptive dips in the current can cause early termination. A surprising amount of detail is contributed by even the smallest current levels. Our threshold is 1e-7 amps for 700 iterations.</p>
+<p>[Samaras 2004] has a very useful set of experimental and FDTD data for calibration and comparison. Comparing a probe via source in the different positions, we obtained agreement of <span class="math inline">\(\sim 7\%\)</span> in impedance and <span class="math inline">\(\sim 5\%\)</span> in frequency.</p>
+<p>The use of a hard source feed-port affects the number of timesteps required by introducing unphysical transients. Using a port with a virtual 50-ohm resistance reduces the computational requirements by a large factor; see [Luebbers 1996].</p>
+<p>Simply monitoring the source current during the simulation is somewhat deceptive. Periodically monitoring the change in the fourier transform seems to be a better convergence metric.</p>
+<p>The units of the FFT (unlike those of the continuous FT) remain in volts.</p>
+<p>Most equations in papers on the FDTD method are supplied without making the scaling factors explicit; some need multiplying by the Courant number, For use with flaport/fdtd the H-field to current line integral in [] requires scaling by <span class="math inline">\(\mu_0 * (dx/dt)\)</span>, where <span class="math inline">\(\mu_0\)</span> is the vacuum magnetic permittivity, dx the cell size, and dt the timestep - despite the equation already possessing a deceptive set of <span class="math inline">\(dx\)</span>-es.</p>
+<p>FIX THIS IT’S WRONG</p>
+<p>Naturally, if one is competent, this discrepancy will be immediately obvious. Those not dimensionally-intuitive, such as myself, find it useful to run dimensional analysis using a unit-aware calculator such as {}.</p>
+<h1 class="unnumbered" id="references" class="unnumbered">References:</h1>
+<div id="refs" class="references hanging-indent" role="doc-bibliography">
+<div id="ref-Finite1991">
+<p>Luebbers, Raymond, and Karl Kunz. 1991. “Finite Difference Time Domain Calculations of Antenna Mutual Coupling.” <em>IEEE Transactions on Electromagnetic Compatibility</em> 34 (3): 357–59. <a href="https://doi.org/10.1109/15.155855">https://doi.org/10.1109/15.155855</a>.</p>
+</div>
+<div id="ref-FDTD1992">
+<p>Luebbers, R. J., and J. Beggs. 1992. “FDTD Calculation of Wide-Band Antenna Gain and Efficiency.” <em>IEEE Transactions on Antennas and Propagation</em> 40 (11): 1403–7. <a href="https://doi.org/10.1109/8.202717">https://doi.org/10.1109/8.202717</a>.</p>
+</div>
+<div id="ref-FDTD1997">
+<p>Luk, K. M., K. F. Tong, S. M. Shum, K. F. Lee, and R. Q. Lee. 1997. “FDTD Analysis of U-Slot Rectangular Patch Antenna.” In <em>IEEE Antennas and Propagation Society International Symposium 1997. Digest</em>, 4:2111–4 vol.4. <a href="https://doi.org/10.1109/APS.1997.625384">https://doi.org/10.1109/APS.1997.625384</a>.</p>
+</div>
+<div id="ref-Input1994">
+<p>Penney, C. W., and R. J. Luebbers. 1994. “Input Impedance, Radiation Pattern, and Radar Cross Section of Spiral Antennas Using FDTD.” <em>IEEE Transactions on Antennas and Propagation</em> 42 (9): 1328–32. <a href="https://doi.org/10.1109/8.318663">https://doi.org/10.1109/8.318663</a>.</p>
+</div>
+</div>
+</body>
+</html>
