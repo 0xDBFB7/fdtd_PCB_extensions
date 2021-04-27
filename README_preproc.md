@@ -71,6 +71,8 @@ It's so thumpingly unintuitive to me that adding 50,000 zeros to a 5000 value da
 
 It is important to remember to normalize the gaussian pulse, or else numerical noise will be introduced. The magnitude is not important - [Luebbers 1992] use 100v, others use 1v, etc.
 
+@FDTD1992
+
 Though uneven dt FFTs exist, the time step can be constant at the courant limit for this simulation.
 
 A step impulse (1 first timestep, 0 otherwise) has been used in some works, though in our case performance was quite horrid.

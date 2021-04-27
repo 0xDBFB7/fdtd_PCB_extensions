@@ -102,6 +102,8 @@ It is important to remember to normalize the gaussian pulse, or else
 numerical noise will be introduced. The magnitude is not important -
 \[Luebbers 1992\] use 100v, others use 1v, etc.
 
+@FDTD1992
+
 Though uneven dt FFTs exist, the time step can be constant at the
 courant limit for this simulation.
 
