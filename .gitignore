@@ -1,0 +1,14 @@
+*.h5
+*.vtk
+*.vti
+*.out
+*.vtp
+*pvsm
+*-bak
+*autosave*
+*.dat
+*.dpl
+*.vtr
+models/BFP620/*
+*.csv
+*.pkl

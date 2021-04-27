@@ -1,0 +1,36 @@
+.title simple_transmission_line_test_spice
+
+
+V1 input 0 1
+
+//VIN input 0 SIN(0 1 8e9)
+R1 input input_terminated 50
+
+//Cinput_terminated input_terminated 0 cstd IC=0
+//Coutput output 0 cstd IC=0
+
+Y1 input_terminated 0 output 0 ymod
+.MODEL ymod txl R=0.023 L=0.306e-9 G=0.0001125 C=0.122e-12 length=3.7
+
+.ic v(input_terminated) = 0
+.ic v(output) = 0
+
+//T1 input_terminated 0 output 0 Z0=50 F=8e9 NL=0.181
+
+//8.85e-12 * 6 * (0.0002^2) * 4.0 / 0.0002
+.model cstd C cap=4.675e-14
+
+//normalized length at frequency (about 3.7 mm irl)
+
+
+R2 output 0 50
+
+.control
+
+tran 100fs 100ps 0 100fs
+plot v(input_terminated) v(output)
+
+
+.endc
+
+.end

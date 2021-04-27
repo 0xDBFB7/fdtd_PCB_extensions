@@ -1,0 +1,18 @@
+.title simple_transmission_line_test_spice
+
+
+V1 input 0 1
+
+//VIN input 0 SIN(0 1 8e9)
+R1 input input_terminated 50
+
+Vinput_terminated input_terminated 0 0
+Voutput output 0 0
+
+//normalized length at frequency (about 3.7 mm irl)
+
+
+R2 output 0 50
+
+
+.end

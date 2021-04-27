@@ -1,0 +1,28 @@
+.title simple_transmission_line_test_spice
+//V1 input 0 1
+
+VIN input 0 SIN(0 1 8e9)
+R1 input input_terminated 50
+
+//normalized length at frequency (about 3.7 mm irl)
+T1 input_terminated 0 output 0 Z0=50 F=8e9 NL=0.181
+R2 output 0 50
+
+.param vin1 = 0
+.param vin2 = 0
+
+.ic v(input_terminated)=vin1
+.ic v(output)=vin2
+
+
+.end
+
+//tran 3.8131e-13 3.8131e-10
+//plot v(input_terminated) v(output) i(VIN)
+//hardcopy sine_txline.ps
+// 1000 timesteps
+
+//print v(output) > output.tsv
+//print v(output)[58]
+//v(output)[10000] gets constrained to end time
+//alterparam vin1 = 0
