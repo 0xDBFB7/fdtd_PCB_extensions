@@ -1,5 +1,5 @@
 ---
-title: 'Musings on an inexpensive 1500 C silicon carbide furnace'
+title: 'z'
 link-citations: true
 ...
 
@@ -36,7 +36,7 @@ See (@Input1994), (@FDTD1992), (@Finite1991), (@FDTD1997).
 
 ### 1. Choose a source / "feed model" geometry, and terminate all ports with a soft source with the appropriate impedance.
 
-Presumably 
+Presumably
 
 '''python
 

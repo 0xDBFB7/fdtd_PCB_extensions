@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="generator" content="pandoc" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
-  <title>Musings on an inexpensive 1500 C silicon carbide furnace</title>
+  <title>z</title>
   <style>
     code{white-space: pre-wrap;}
     span.smallcaps{font-variant: small-caps;}
@@ -20,7 +20,7 @@
 </head>
 <body>
 <header id="title-block-header">
-<h1 class="title">Musings on an inexpensive 1500 C silicon carbide furnace</h1>
+<h1 class="title">z</h1>
 </header>
 <!---# Musings on an inexpensive 1500 C furnace-->
 <!---
@@ -30,14 +30,23 @@ pandoc --filter pandoc-citeproc --bibliography=/home/arthurdent/Projects/covidin
 ?
 -->
 <h1 id="some-notes-on-z-and-fdtd">Some notes on Z and FDTD</h1>
-<p>Note: I’m way overcomplicating this: it’s an extremely basic 20-line procedure; these are also my notes from using this.</p>
-<p>I was using this to measure the impedance of some antenna and microstrip designs; so I’ve only tried getting the Z11 / Z22 so far. I believe it is easy to compute S11 and S22 directly from that.</p>
+<p>Note: I’m way overcomplicating this: it’s an extremely basic 20-line procedure; these are also my notes from using this. I’m sure you know this already, so by putting it in this format rather than a PR,</p>
+<p>I was using this to measure the impedance of some antenna and microstrip designs; so I’ve only tried getting the complex impedance parameters (Z11 / Z22) so far. I believe it is easy to compute S11 and S22 directly from that.</p>
 <p>I believe computing S12 and S21 should be essentially identical; apply a pulse to each source in turn, and just divide the complex voltages accordingly; in that case, the output will be relative to the source impedance.</p>
 <p>In addition, this was all formulated for electrical signals on planar with ground plane, where the kinds of sources make sense. I have no idea how to modify this for the optical domain - if modifications are indeed required.</p>
+<p>In addition, this is nothing more than applying an input and monitoring the output; some tools such as gprMax make response evaluation into a separate tool that just wraps around ‘fdtd’.</p>
 <p>The <em>impedance</em> of a structure over frequency can be determined easily by:</p>
 <p>See (<span class="citation" data-cites="Input1994">Penney and Luebbers (<a href="#ref-Input1994" role="doc-biblioref">1994</a>)</span>), (<span class="citation" data-cites="FDTD1992">Luebbers and Beggs (<a href="#ref-FDTD1992" role="doc-biblioref">1992</a>)</span>), (<span class="citation" data-cites="Finite1991">Luebbers and Kunz (<a href="#ref-Finite1991" role="doc-biblioref">1991</a>)</span>), (<span class="citation" data-cites="FDTD1997">Luk et al. (<a href="#ref-FDTD1997" role="doc-biblioref">1997</a>)</span>).</p>
-<h3 id="terminate-all-ports-with-a-soft-source-with-the-right-impedance.">Terminate all ports with a soft source with the right impedance.</h3>
-<h3 id="apply-a-broadband-pulse.">Apply a broadband pulse.</h3>
+<h3 id="choose-a-source-feed-model-geometry-and-terminate-all-ports-with-a-soft-source-with-the-appropriate-impedance.">1. Choose a source / “feed model” geometry, and terminate all ports with a soft source with the appropriate impedance.</h3>
+<p>Presumably</p>
+<p>’’’python</p>
+<p>’’’</p>
+<p>(I’m sure you know all this stuff already)</p>
+<p>The type of source geometry used can apparently decisively affect the performance of this method</p>
+<p><span class="citation" data-cites="simple1996">Luebbers and Langdon (<a href="#ref-simple1996" role="doc-biblioref">1996</a>)</span></p>
+<p>The voltage and current time histories on each port need to be saved.</p>
+<h3 id="apply-a-broadband-pulse.">3. Apply a broadband pulse.</h3>
+<p>You want a pulse that includes strong components across the entire frequency range of interest, but apparently you also don’t want to introduce noise.</p>
 <p>This is the computational equivalent of dropping a piano off a balcony to see which key is stuck.</p>
 <p>Our implementation is in .</p>
 <p>A similar mismatch to the SPICE exists for fourier methods - but in the other direction. The courant limit often demands fine timesteps, but since each FFT bin is $ f_{bin} = n_{bin} / (N_{simulation}  dt) $ , the majority of the FFT bins exist into the hundreds or thousands of GHz, leaving no resolution in the low-frequency domain of interest unless <span class="math inline">\(N_{simulation}\)</span> is extremely large - even if all the transients in the simulation have died down, you still have to keep the sim running to make the FFT happy!</p>
@@ -67,6 +76,9 @@ pandoc --filter pandoc-citeproc --bibliography=/home/arthurdent/Projects/covidin
 </div>
 <div id="ref-FDTD1992">
 <p>Luebbers, R. J., and J. Beggs. 1992. “FDTD Calculation of Wide-Band Antenna Gain and Efficiency.” <em>IEEE Transactions on Antennas and Propagation</em> 40 (11): 1403–7. <a href="https://doi.org/10.1109/8.202717">https://doi.org/10.1109/8.202717</a>.</p>
+</div>
+<div id="ref-simple1996">
+<p>Luebbers, R. J., and H. S. Langdon. 1996. “A Simple Feed Model That Reduces Time Steps Needed for FDTD Antenna and Microstrip Calculations.” <em>IEEE Transactions on Antennas and Propagation</em> 44 (7): 1000–1005. <a href="https://doi.org/10.1109/8.504308">https://doi.org/10.1109/8.504308</a>.</p>
 </div>
 <div id="ref-FDTD1997">
 <p>Luk, K. M., K. F. Tong, S. M. Shum, K. F. Lee, and R. Q. Lee. 1997. “FDTD Analysis of U-Slot Rectangular Patch Antenna.” In <em>IEEE Antennas and Propagation Society International Symposium 1997. Digest</em>, 4:2111–4 vol.4. <a href="https://doi.org/10.1109/APS.1997.625384">https://doi.org/10.1109/APS.1997.625384</a>.</p>
