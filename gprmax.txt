@@ -1,0 +1,21 @@
+Hi! gprMax is such an awesome program, thanks for developing it.
+
+Pardon me if this has been discussed before. Also,
+feature-creep is bad, so it's totally reasonable 
+
+The killer feature that Agilent ADS et al seem to have is the ability to do 
+coupled simulations, with transient sims of lumped elements connected to microstrip.
+
+OpenEMS also has some provisions for this in AddLumpedElement.m - it might be better to add this
+to OpenEMS, since it's got a graded mesh.
+
+It turns out to be really simple to integrate SPICE with FDTD [V.A. Thomas et al IEEE 1994],
+and yields great results [Thomas]
+
+[Sui 1992] uses simple analytic expressions for some lumped components; that works really well.
+
+
+
+geometry_outputs write_vtk(self, G, pbar) , material_threshold=0
+
+
