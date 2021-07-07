@@ -70,35 +70,24 @@ class Port:
 
         return (pcb.grid.E[self.N_x,self.N_y,z_slice,Z]/sqrt(epsilon_0))*(pcb.cell_size)
 
+# integrated into fdtd
 
-# Gaussian pulses determined via mathematica; see normalizedgaussian.nb
-# and normalized gaussian.nb.pdf
-# see http://www.cse.yorku.ca/~kosta/CompVis_Notes/fourier_transform_Gaussian.pdf
-# http://www.sci.utah.edu/~gerig/CS7960-S2010/handouts/04%20Gaussian%20derivatives.pdf
-
-def normalized_gaussian_pulse(pcb,fwhm):
-    t = pcb.time
-    sigma = fwhm/2.355
-    return exp(-((t**2.0)/(2.0*(sigma**2.0))))
-
-def normalized_gaussian_derivative_pulse(pcb,fwhm):
-    t = pcb.time
-    sigma = fwhm/2.355
-    return (exp((1.0/2.0) - (t**2.0)/(2.0*sigma**2.0))*t)/sigma
-
-###############################################################################
-
-# def gaussian_derivative_pulse(pcb, dt, beta):
-#     #have to normalize
-#     t = pcb.time
-#     s = 4.0/(beta*dt)
-#     b = (t - beta*dt)
-#     exponent_1 = -1.0*((s)**2.0)*((b)**2.0)
-#     part_one = exp(exponent_1)
-#     part_two = -2.0*(s**2.0)*b
-#     return part_one * part_two
-
-
+# # willFIXME
+# # # Gaussian pulses determined via mathematica; see normalizedgaussian.nb
+# # # and normalized gaussian.nb.pdf
+# # # see http://www.cse.yorku.ca/~kosta/CompVis_Notes/fourier_transform_Gaussian.pdf
+# # # http://www.sci.utah.edu/~gerig/CS7960-S2010/handouts/04%20Gaussian%20derivatives.pdf
+# #
+# # def normalized_gaussian_pulse(pcb,fwhm):
+# #     t = pcb.time
+# #     sigma = fwhm/2.355
+# #     return exp(-((t**2.0)/(2.0*(sigma**2.0))))
+# #
+# # def normalized_gaussian_derivative_pulse(pcb,fwhm):
+# #     t = pcb.time
+# #     sigma = fwhm/2.355
+# #     return (exp((1.0/2.0) - (t**2.0)/(2.0*sigma**2.0))*t)/sigma
+#
 # def normalized_gaussian_pulse(t,fwhm):
 #     sigma = fwhm/2.355
 #     return exp(-((t**2.0)/(2.0*(sigma**2.0))))
@@ -141,7 +130,7 @@ def compute_deltas(pcb):
         #equation 4, 5 in [Toland 1993]
 
         # a slightly simplified version is
-        # https://www.eecs.wsu.edu/~schneidj/ufdtd/chap3.pdf, eq. 3.26
+        # https://eecs.wsu.edu/~schneidj/ufdtd/chap3.pdf, eq. 3.26
         # Aha! First we let the update occur normally, *then* we apply the J source, eq. 3.28 in the latter.
         # Toland uses a current averaging method
         # self.current = 1.0
@@ -161,27 +150,7 @@ def compute_deltas(pcb):
         if(abs(port.dV_dt) > max_delta_V):
             max_delta_V = abs(port.dV_dt)
 
-        # self.grid.E[port.N_x,port.N_y,z_slice,Z] -=
-        #
-        #
-        # E_n = self.grid.E[port.N_x,port.N_y,z_slice,Z]*perm_factor
-        #
-        # L_H =  ((self.grid.H[port.N_x,port.N_y-1,z_slice,X] - self.grid.H[port.N_x,port.N_y,z_slice,X]) / self.cell_size)
-        # L_H += ((self.grid.H[port.N_x,port.N_y,z_slice,Y] - self.grid.H[port.N_x-1,port.N_y,z_slice,Y]) / self.cell_size)
-        #
-        # I = -1.0*(port.old_current+port.current)/(2.0*(self.cell_size**2.0))
-        # print(E_n, L_H, I)
-        # E_new =  E_n
-        # E_new += L_H
-        # E_new -= I
-        #
-        # E_new /= perm_factor
-        #
-        # self.grid.E[port.N_x,port.N_y,z_slice,Z] = E_new
-        #
-        # print("E_new",E_new)
-        #
-        # port.old_current = port.current
+
     return max_delta_V
 
 def apply_deltas(pcb):

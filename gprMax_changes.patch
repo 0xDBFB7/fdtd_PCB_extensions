@@ -1,0 +1,593 @@
+:100644 100644 b2c61ea 3619234 M	gprMax/fields_outputs.py
+:100644 100644 4b6f596 c2efc83 M	gprMax/geometry_outputs.py
+:100644 100644 698d176 027c6aa M	gprMax/grid.py
+:100644 100644 b060d15 71ed83f M	gprMax/input_cmds_multiuse.py
+:100644 100644 cddbadf 7f3b12e M	gprMax/input_cmds_singleuse.py
+:000000 100644 0000000 cd2fc9b A	gprMax/lumped_components.py
+:100644 000000 84cd93f 0000000 D	gprMax/lumped_sources.py
+:100644 100644 42cda53 331fe6a M	gprMax/model_build_run.py
+:100644 100644 b1cab99 512f5ae M	gprMax/sources.py
+:000000 100644 0000000 941ee52 A	tests/lumped_components/path_integral_test.py
+:000000 100644 0000000 10c515e A	tests/lumped_components/voltage_test.in
+
+diff --git a/gprMax/fields_outputs.py b/gprMax/fields_outputs.py
+index b2c61ea..3619234 100644
+--- a/gprMax/fields_outputs.py
++++ b/gprMax/fields_outputs.py
+@@ -140,3 +140,13 @@ def write_hdf5_outputfile(outputfile, G):
+ 
+         for output in rx.outputs:
+             f['/rxs/rx' + str(rxindex + 1) + '/' + output] = rx.outputs[output]
++
++
++    # Lumped ports
++    for lpindex, lp in enumerate(G.lumped_component_ports):
++        grp = f.create_group('/lps/lp' + str(lp.SPICE_net_ID))
++        grp.attrs['Name'] = lp.SPICE_net_ID
++        grp.attrs['Position'] = (lp.xcoord * G.dx, lp.ycoord * G.dy, lp.zcoord * G.dz)
++
++        f['/lps/lp' + str(lp.SPICE_net_ID) + '/voltages'] = lp.voltage_history
++        f['/lps/lp' + str(lp.SPICE_net_ID) + '/currents'] = lp.current_history
+diff --git a/gprMax/geometry_outputs.py b/gprMax/geometry_outputs.py
+index 4b6f596..c2efc83 100644
+--- a/gprMax/geometry_outputs.py
++++ b/gprMax/geometry_outputs.py
+@@ -116,7 +116,7 @@ class GeometryView(object):
+         self.filename = os.path.abspath(os.path.join(G.inputdirectory, self.basefilename + appendmodelnumber))
+         self.filename += self.fileext
+ 
+-    def write_vtk(self, G, pbar, material_threshold=0):
++    def write_vtk(self, G, pbar):
+         """
+         Writes the geometry information to a VTK file. Either ImageData (.vti) for a
+         per-cell geometry view, or PolygonalData (.vtp) for a per-cell-edge geometry view.
+diff --git a/gprMax/grid.py b/gprMax/grid.py
+index 698d176..027c6aa 100644
+--- a/gprMax/grid.py
++++ b/gprMax/grid.py
+@@ -149,6 +149,11 @@ class FDTDGrid(Grid):
+         self.hertziandipoles = []
+         self.magneticdipoles = []
+         self.transmissionlines = []
++
++        self.lumped_reference_port = None
++        self.lumped_component_ports = [] # does not include reference_port
++        self.SPICE_netlist = None
++        
+         self.rxs = []
+         self.srcsteps = [0, 0, 0]
+         self.rxsteps = [0, 0, 0]
+diff --git a/gprMax/input_cmds_multiuse.py b/gprMax/input_cmds_multiuse.py
+index b060d15..71ed83f 100644
+--- a/gprMax/input_cmds_multiuse.py
++++ b/gprMax/input_cmds_multiuse.py
+@@ -156,6 +156,58 @@ def process_multicmds(multicmds, G):
+ 
+             G.voltagesources.append(v)
+ 
++
++
++    # Lumped Port
++    cmdname = '#lumpedport'
++    if multicmds[cmdname] is not None:
++        for cmdinstance in multicmds[cmdname]:
++            command_args = cmdinstance.split()
++            if(not(len(command_args) == 7)):
++                raise CmdInputError("'" + cmdname + ': ' + ' '.join(command_args) + "'" + ' requires seven parameters')
++
++            #ARG INDICES#
++            POLARIZATION = 0 #xyz
++            CURRENT_DIRECTION = 1 #+1, -1
++            XCOORD = 2
++            YCOORD = 3
++            ZCOORD = 4
++            SPICE_NET_ID = 5
++            REFERENCE_PORT = 6 # 1 or 0
++
++
++            # Check polarity & position parameters
++            polarisation = command_args[POLARIZATION].lower()
++            if polarisation not in ('x', 'y', 'z'):
++                raise CmdInputError("'" + cmdname + ': ' + ' '.join(command_args) + "'" + ' polarisation must be x, y, or z')
++
++            xcoord = G.calculate_coord('x', command_args[XCOORD])
++            ycoord = G.calculate_coord('y', command_args[YCOORD])
++            zcoord = G.calculate_coord('z', command_args[ZCOORD])
++
++            check_coordinates(xcoord, ycoord, zcoord)
++            if xcoord < G.pmlthickness['x0'] or xcoord > G.nx - G.pmlthickness['xmax'] or ycoord < G.pmlthickness['y0'] or ycoord > G.ny - G.pmlthickness['ymax'] or zcoord < G.pmlthickness['z0'] or zcoord > G.nz - G.pmlthickness['zmax']:
++                print(Fore.RED + "WARNING: '" + cmdname + ': ' + ' '.join(command_args) + "'" + ' sources and receivers should not normally be positioned within the PML.' + Style.RESET_ALL)
++
++            lp = LumpedPort()
++            lp.polarisation = polarisation
++            lp.current_direction = int(command_args[1])
++            lp.xcoord = xcoord
++            lp.ycoord = ycoord
++            lp.zcoord = zcoord
++            lp.SPICE_net_ID = int(command_args[1])
++            lp.ID = lp.SPICE_net_ID
++
++            if G.messages:
++                print('Lumped port with polarity {} at {:g}m, {:g}m, {:g}m'.format(v.polarisation, v.xcoord * G.dx, v.ycoord * G.dy, v.zcoord * G.dz))
++
++            if(int(command_args[REFERENCE_PORT])):
++                G.lumped_reference_port = lp
++            else:
++                G.lumped_component_ports.append(lp)
++
++
++
+     # Hertzian dipole
+     cmdname = '#hertzian_dipole'
+     if multicmds[cmdname] is not None:
+diff --git a/gprMax/input_cmds_singleuse.py b/gprMax/input_cmds_singleuse.py
+index cddbadf..7f3b12e 100644
+--- a/gprMax/input_cmds_singleuse.py
++++ b/gprMax/input_cmds_singleuse.py
+@@ -260,6 +260,23 @@ def process_singlecmds(singlecmds, G):
+         if G.messages:
+             print('All receivers will step {:g}m, {:g}m, {:g}m for each model run.'.format(G.rxsteps[0] * G.dx, G.rxsteps[1] * G.dy, G.rxsteps[2] * G.dz))
+ 
++
++    cmd = '#SPICE_netlist'
++    if singlecmds[cmd] is not None:
++        tmp = singlecmds[cmd].split()
++        if(len(tmp) != 1):
++            raise CmdInputError(cmd + ' requires one parameter')
++        SPICE_netlist = tmp[0]
++
++        # See if file exists at specified path and if not try input file directory
++        if not os.path.isfile(SPICE_netlist):
++            SPICE_netlist = os.path.abspath(os.path.join(G.inputdirectory, SPICE_netlist))
++
++        if G.messages:
++            print('\nUsing SPICE netlist: {}'.format(SPICE_netlist))
++
++        G.SPICE_netlist = SPICE_netlist
++
+     # Excitation file for user-defined source waveforms
+     cmd = '#excitation_file'
+     if singlecmds[cmd] is not None:
+diff --git a/gprMax/lumped_components.py b/gprMax/lumped_components.py
+new file mode 100644
+index 0000000..cd2fc9b
+--- /dev/null
++++ b/gprMax/lumped_components.py
+@@ -0,0 +1,157 @@
++# Copyright (C) 2015-2020: The University of Edinburgh
++#                 Authors: Craig Warren and Antonis Giannopoulos
++#
++# This file is part of gprMax.
++#
++# gprMax is free software: you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation, either version 3 of the License, or
++# (at your option) any later version.
++#
++# gprMax is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with gprMax.  If not, see <http://www.gnu.org/licenses/>.
++
++from copy import deepcopy
++
++import numpy as np
++
++from gprMax.constants import c
++from gprMax.constants import floattype
++from gprMax.grid import Ix
++from gprMax.grid import Iy
++from gprMax.grid import Iz
++from gprMax.utilities import round_value
++
++
++class LumpedPort(object):
++    def __init__(self):
++
++        self.SPICE_net_ID = None
++        self.xcoord = None
++        self.ycoord = None
++        self.zcoord = None
++        self.polarisation = None
++        self.current_direction = None
++
++        self.conductor_contour_distance_x = None
++        self.conductor_contour_distance_y = None
++        self.conductor_contour_distance_z = None
++
++        self.voltage = []
++        self.voltage = []
++
++        self.voltage_history = []
++        self.current_history = []
++
++def e_field_integrate(G, positive_port, reference_port):
++    '''
++    Determine the potential difference between two ports.
++
++    Doesn't matter how you integrate.
++
++    '''
++    potential_difference = 0
++    if(positive_port.xcoord > reference_port.xcoord):
++        step = -1
++    else:
++        step = 1
++    for x in range(positive_port.xcoord,reference_port.xcoord, step):
++        potential_difference += G.Ex[x, positive_port.ycoord, positive_port.zcoord] * G.dx * step
++
++    if(positive_port.ycoord > reference_port.ycoord):
++        step = -1
++    else:
++        step = 1
++    for y in range(positive_port.ycoord,reference_port.ycoord, step):
++        potential_difference += G.Ey[positive_port.xcoord, y , positive_port.zcoord] * G.dy * step
++
++    if(positive_port.zcoord > reference_port.zcoord):
++        step = -1
++    else:
++        step = 1
++    for z in range(positive_port.zcoord,reference_port.zcoord, step):
++        potential_difference += G.Ez[positive_port.xcoord, positive_port.ycoord, z] * G.dz * step
++
++    return potential_difference
++
++
++
++# class LumpedComponent(object):
++"""
++
++
++#waveform: gaussiandot 1 1e9 myWave
++#hertzian_dipole: z 0.050 0.050 0.050 myWave
++
++fields_outputs -> store_outputs
++
++for tl in G.transmissionlines:
++    tl.Vtotal[iteration] = tl.voltage[tl.antpos]
++    tl.Itotal[iteration] = tl.current[tl.antpos]
++
++
++See "The use of SPICE lumped circuits as sub-grid models for FDTD analysis", doi:10.1109/75.289516
++which deals with lumped elements of a single-cell size, and
++"Incorporating non-linear lumped elements in FDTD: the equivalent source method"
++which deals with objects of arbitrary size.
++
++You can use this 'equivalent source method' either by line-integrating the currents around a conductor
++and setting the electric field, or by line-integrating the voltage and setting the magnetic field.
++
++I chose the latter because it seems to make more sense to set a voltage initial-condition in SPICE than a current.
++
++1. Normal electric field update.
++2. Obtain terminal voltages by an electric field line integration from one port to another.
++3. Normal magnetic field update.  - I think this can happen at any time, actually.
++4. Obtain the lumped currents from the voltages - either via SPICE or via analytic expressions for each component
++5. Set H along a contour enclosing the conductor to net_current / Lc
++6. ...
++7. Profit!
++
++
++
++"""
++
++
++def compute_voltages(self):
++    for port in self.component_ports:
++        port.voltage = e_field_integrate(G, port, self.reference_port)
++        port.voltage_history.append(port.voltage)
++
++# def run_spice(self):
++#     port.current = e_field_integrate(G, port, self.reference_port)
++#
++
++
++    #
++    #
++    # i = self.xcoord
++    # j = self.ycoord
++    # k = self.zcoord
++    #
++    #
++    # self.voltage
++    # self.current
++    #
++    # if self.polarisation == 'x':
++    #     Ex[i, j, k] -= updatecoeffsE[ID[G.IDlookup[componentID], i, j, k], 4] * self.waveformvaluesJ[iteration] * self.dl * (1 / (G.dx * G.dy * G.dz))
++    #
++    # elif self.polarisation == 'y':
++    #     Ey[i, j, k] -= updatecoeffsE[ID[G.IDlookup[componentID], i, j, k], 4] * self.waveformvaluesJ[iteration] * self.dl * (1 / (G.dx * G.dy * G.dz))
++    #
++    # elif self.polarisation == 'z':
++    #     Ez[i, j, k] -= updatecoeffsE[ID[G.IDlookup[componentID], i, j, k], 4] * self.waveformvaluesJ[iteration] * self.dl * (1 / (G.dx * G.dy * G.dz))
++    #
++    #
++    #
++    # total_current = (Ix(i, j, k, G.Hx, G.Hy, G.Hz, G)**2.0)
++    #                 + (Iy(i, j, k, G.Hx, G.Hy, G.Hz, G)**2.0)
++    #                 + (Iz(i, j, k, G.Hx, G.Hy, G.Hz, G)**2.0)
++    # total_current = sqrt(total_current)
++    #
++    # self.current
+diff --git a/gprMax/lumped_sources.py b/gprMax/lumped_sources.py
+deleted file mode 100644
+index 84cd93f..0000000
+--- a/gprMax/lumped_sources.py
++++ /dev/null
+@@ -1,50 +0,0 @@
+-# Copyright (C) 2015-2020: The University of Edinburgh
+-#                 Authors: Craig Warren and Antonis Giannopoulos
+-#
+-# This file is part of gprMax.
+-#
+-# gprMax is free software: you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation, either version 3 of the License, or
+-# (at your option) any later version.
+-#
+-# gprMax is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with gprMax.  If not, see <http://www.gnu.org/licenses/>.
+-
+-from copy import deepcopy
+-
+-import numpy as np
+-
+-from gprMax.constants import c
+-from gprMax.constants import floattype
+-from gprMax.grid import Ix
+-from gprMax.grid import Iy
+-from gprMax.grid import Iz
+-from gprMax.utilities import round_value
+-
+-
+-
+-class LumpedComponent(object):
+-    """
+-
+-
+-
+-    #waveform: gaussiandot 1 1e9 myWave
+-    #hertzian_dipole: z 0.050 0.050 0.050 myWave
+-
+-    fields_outputs -> store_outputs
+-
+-    for tl in G.transmissionlines:
+-        tl.Vtotal[iteration] = tl.voltage[tl.antpos]
+-        tl.Itotal[iteration] = tl.current[tl.antpos]
+-
+-
+-    """
+-
+-    def __init__(self):
+-        self.ID = None
+diff --git a/gprMax/model_build_run.py b/gprMax/model_build_run.py
+index 42cda53..331fe6a 100644
+--- a/gprMax/model_build_run.py
++++ b/gprMax/model_build_run.py
+@@ -469,6 +469,10 @@ def solve_cpu(currentmodelrun, modelend, G):
+         elif Material.maxpoles > 1:
+             update_electric_dispersive_multipole_B(G.nx, G.ny, G.nz, G.nthreads, Material.maxpoles, G.updatecoeffsdispersive, G.ID, G.Tx, G.Ty, G.Tz, G.Ex, G.Ey, G.Ez)
+ 
++        for lc in G.lumped_components:
++            lc.compute_voltages()
++
++
+     tsolve = timer() - tsolvestart
+ 
+     return tsolve
+diff --git a/gprMax/sources.py b/gprMax/sources.py
+index b1cab99..512f5ae 100644
+--- a/gprMax/sources.py
++++ b/gprMax/sources.py
+@@ -508,63 +508,3 @@ class PlaneWave(Source):
+         self.Hxinc = np.sin(self.psi) * np.sin(self.phi) + np.cos(self.psi) * np.cos(self.theta) * np.cos(self.phi)
+         self.Hyinc = -np.sin(self.psi) * np.cos(self.phi) + np.cos(self.psi) * np.cos(self.theta) * np.sin(self.phi)
+         self.Hzinc = -np.cos(self.psi) * np.sin(self.theta)
+-
+-
+-
+-class LumpedNetSource(Source):
+-    """
+-
+-    Args:
+-        iteration (int): Current iteration (timestep).
+-        updatecoeffsH (memory view): numpy array of magnetic field update coefficients.
+-        ID (memory view): numpy array of numeric IDs corresponding to materials in the model.
+-        Hx, Hy, Hz (memory view): numpy array of magnetic field values.
+-        G (class): Grid class instance - holds essential parameters describing the model.
+-    """
+-
+-
+-    '''
+-    here's some blather
+-
+-    The way I've used the sources is as follows:
+-
+-    ------------------------------------------- - microstrip trace or component lead
+-                     !                          - source, Z polarized
+-                    | |                         - copper via
+-                    | |                         - copper via
+-    ------------------------------------------- - copper plane
+-    that way the electric field across the source is approximately equal
+-    to the voltage across
+-
+-
+-    this is the method used in [antenna thing].
+-
+-    it would be much more useful to integrate over the field from some specified
+-    ground cell to get the relative voltage, especially
+-    when we're talking about component leads.
+-    '''
+-
+-    self.voltage
+-    self.current
+-
+-    Ex[i, j, k] = - self.voltage[self.antpos] / G.dx
+-    Ey[i, j, k] = - self.voltage[self.antpos] / G.dy
+-    Ez[i, j, k] = - self.voltage[self.antpos] / G.dz
+-
+-
+-
+-    if iteration * G.dt >= self.start and iteration * G.dt <= self.stop:
+-        i = self.xcoord
+-        j = self.ycoord
+-        k = self.zcoord
+-
+-        if self.polarisation == 'x':
+-            self.current[self.antpos] = Ix(i, j, k, G.Hx, G.Hy, G.Hz, G)
+-
+-        elif self.polarisation == 'y':
+-            self.current[self.antpos] = Iy(i, j, k, G.Hx, G.Hy, G.Hz, G)
+-
+-        elif self.polarisation == 'z':
+-            self.current[self.antpos] = Iz(i, j, k, G.Hx, G.Hy, G.Hz, G)
+-
+-        self.update_current(iteration, G)
+diff --git a/tests/lumped_components/path_integral_test.py b/tests/lumped_components/path_integral_test.py
+new file mode 100644
+index 0000000..941ee52
+--- /dev/null
++++ b/tests/lumped_components/path_integral_test.py
+@@ -0,0 +1,58 @@
++import sys
++import unittest
++
++# http://stackoverflow.com/a/17981937/1942837
++from contextlib import contextmanager
++from io import StringIO
++
++from gprMax.utilities import *
++
++from gprMax.input_cmd_funcs import *
++from gprMax.grid import FDTDGrid
++from gprMax.lumped_components import *
++
++
++def create_test_grid():
++    G = FDTDGrid()
++    G.dx = 0.1
++    G.dy = 0.1
++    G.dz = 0.1
++    G.nx = 10
++    G.ny = 10
++    G.nz = 10
++    G.initialise_geometry_arrays()
++    G.initialise_field_arrays()
++    return G
++
++class integral_tests(unittest.TestCase):
++    def test_E_field_integral(self):
++        G = create_test_grid()
++        reference_port = LumpedPort()
++        reference_port.xcoord = 10
++        reference_port.ycoord = 10
++        reference_port.zcoord = 10
++
++        positive_port = LumpedPort()
++        positive_port.xcoord = 0
++        positive_port.ycoord = 0
++        positive_port.zcoord = 0
++
++        G.Ex.fill(1) #1 v/m
++        voltage = e_field_integrate(G, positive_port, reference_port)
++        self.assertAlmostEqual(voltage, 1.0, delta=0.05)
++
++        G.Ex.fill(0) #1 v/m
++        G.Ey.fill(1) #1 v/m
++        voltage = e_field_integrate(G, positive_port, reference_port)
++        self.assertAlmostEqual(voltage, 1.0, delta=0.05)
++
++        G.Ey.fill(0) #1 v/m
++        G.Ez.fill(1) #1 v/m
++        voltage = e_field_integrate(G, positive_port, reference_port)
++        self.assertAlmostEqual(voltage, 1.0, delta=0.05)
++
++# class (unittest.TestCase):
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff --git a/tests/lumped_components/voltage_test.in b/tests/lumped_components/voltage_test.in
+new file mode 100644
+index 0000000..10c515e
+--- /dev/null
++++ b/tests/lumped_components/voltage_test.in
+@@ -0,0 +1,71 @@
++#num_threads: 14
++
++
++#material: 1     6e7     1 0 copper
++#material: 4.2   0.0  1 0 substrate
++//rel permittivity, conductivity (S/m), rel. permeability, magnetic loss (Ohms/m)
++
++---------------------------------------------------
++#python:
++from gprMax.input_cmd_funcs import *
++import matplotlib.image as mpimage
++import numpy as np
++import os
++import math
++
++time = 2e-9
++print("#time_window: {}".format(time))
++
++
++domain_x = 0.0155
++domain_y = 0.0155
++domain_z = 0.005
++
++N = 100 +20
++#PML boundaries are 10 cells on each side of the domain
++
++domain(domain_x, domain_y, domain_z)
++
++cell_x = domain_x/N
++cell_y = domain_y/N
++cell_z = domain_z/(N/2)
++
++dx_dy_dz(cell_x,cell_y,cell_z)
++
++copper_thickness = 0.000035
++substrate_thickness = 0.00079
++
++#ground plane
++cells_from_border = 12
++box(cells_from_border*cell_x, cells_from_border*cell_y, (cells_from_border*cell_z)-math.ceil(copper_thickness/cell_z)*cell_z,
++                            domain_x-(cells_from_border*cell_x), domain_y-(cells_from_border*cell_y), cells_from_border*cell_z, 'copper')
++
++#substrate
++box(cells_from_border*cell_x, cells_from_border*cell_y, cells_from_border*cell_z,
++                            domain_x-(cells_from_border*cell_x), domain_y-(cells_from_border*cell_y), cells_from_border*cell_z+substrate_thickness, 'substrate')
++
++import_pos_z = cells_from_border*cell_z+substrate_thickness;
++
++print("#voltage_source: z {} {} {} 50 waveform_1".format(tx_pos_x,tx_pos_y,tx_pos_z))
++#polarization, x,y,z, resistance, waveform
++print("#rx: {} {} {}".format(tx_pos_x,tx_pos_y,tx_pos_z))
++box(tx_pos_x,tx_pos_y,import_pos_z-substrate_thickness,tx_pos_x+cell_x,tx_pos_y+cell_y,import_pos_z-(cell_z*2),'copper') #connect bottom face of transmitter to ground plane
++
++rx_pos_x = import_pos_x + 0.0075
++rx_pos_y = import_pos_y + 0.00725
++rx_pos_z = import_pos_z - cell_z
++print("#rx: {} {} {}".format(rx_pos_x,rx_pos_y,rx_pos_z))wav
++box(rx_pos_x,rx_pos_y,import_pos_z-substrate_thickness,rx_pos_x+cell_x,rx_pos_y+cell_y,import_pos_z-(cell_z*2),'copper') #connect bottom face of reciever to ground plane
++
++geometry_view(0,0,0,domain_x,domain_y,domain_z,cell_x,cell_y,cell_z,'geometry') #creates .vti file, no edges
++geometry_view(0,0,0,domain_x,domain_y,domain_z,cell_x,cell_y,cell_z,'geometry',type="f") # creates .vtp file, no sources
++
++
++snapshot_N = 1
++
++for i in range(1, snapshot_N):
++    print('#snapshot: {} {} {} {} {} {} {} {} {} {} snapshot{}'.format(0,0,0,domain_x,domain_y,domain_z,cell_x,cell_y,cell_z,(time/snapshot_N)*i,i))
++
++
++#end_python:
++---------------------------------------------------
